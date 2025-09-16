@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reinforcement Learning Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background: linear-gradient(to bottom right, #f8fafc, #e2e8f0);
+            color: #1a202c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            overflow-y: hidden;
+        }
+
+        .container {
+            max-width: 95%;
+            width: 95%;
+            padding: 2rem;
+            background-color: #fff;
+            border-radius: 2rem;
+            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.1), 0 5px 10px -5px rgba(0, 0, 0, 0.04);
+            transition: all 0.3s ease-in-out;
+            border: 4px solid #a5b4fc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-y: auto;
+            max-height: 100vh;
+        }
+        @media (min-width: 1024px) {
+            .container {
+                width: auto;
+                max-width: 1024px;
+            }
+        }
+        .puzzle-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin: 2rem auto;
+            max-width: 600px;
+        }
+        .puzzle-item {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 1rem;
+            background-color: #cbd5e1;
+            cursor: pointer;
+            transition: transform 0.2s, background-color 0.2s, box-shadow 0.2s;
+            box-shadow: inset 0 -6px 0 rgba(0,0,0,0.2);
+            font-size: clamp(1rem, 8vw, 3rem);
+            user-select: none;
+            color: #1a202c;
+            font-weight: bold;
+        }
+        .puzzle-item:hover:not(.flipped):not(.matched) {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 12px -2px rgba(0, 0, 0, 0.15);
+        }
+        .puzzle-item.flipped {
+            background-color: #fff;
+            box-shadow: 0 6px 10px -2px rgba(0, 0, 0, 0.1);
+        }
+        .puzzle-item.matched {
+            background-color: #6ee7b7;
+            transform: scale(0.95);
+            cursor: default;
+            animation: pop-match 0.5s ease-out;
+        }
+        @keyframes pop-match {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(0.95); }
+        }
+        .button-primary {
+            background-color: #818cf8;
+            color: white;
+            padding: 0.75rem 2.5rem;
+            border-radius: 9999px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease-in-out;
+            cursor: pointer;
+            border: 3px solid #6366f1;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .button-primary:hover {
+            background-color: #6366f1;
+            transform: translateY(-3px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+        }
+        .button-primary:active {
+            transform: translateY(0);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        .text-robot {
+            color: #ef4444;
+            font-weight: bold;
+        }
+        .input-field {
+            width: 100%;
+            max-width: 300px;
+            padding: 0.75rem;
+            border-radius: 1rem;
+            border: 2px solid #a5b4fc;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+        .page-title {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #4f46e5;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+        }
+        .round-card {
+            background-color: #f0f4f8;
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 3px solid #c7d2fe;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.3s ease-in-out;
+        }
+        .round-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 10px rgba(0,0,0,0.15);
+        }
+        .award-icon {
+            font-size: 5rem;
+            line-height: 1;
+        }
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+        .processing-cursor {
+            cursor: wait !important;
+        }
+        .log-container {
+            background-color: #f0f4f8;
+            border-radius: 1rem;
+            padding: 1rem;
+            border: 2px solid #e2e8f0;
+            overflow-y: auto;
+            max-height: 300px;
+            font-family: monospace;
+            text-align: left;
+        }
+        .log-item.reward-positive {
+            color: #16a34a;
+        }
+        .log-item.reward-negative {
+            color: #dc2626;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center">
+    <div class="container text-center">
+        <h1 class="page-title">🧠 RL Sparkle 🤖</h1>
+        <div id="app-content">
+            <div class="flex flex-col items-center">
+                <h2 class="text-2xl font-bold mb-4 text-indigo-700">Loading...</h2>
+                <p>Please wait while the game loads.</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAnalytics, logEvent, setUserId as setAnalyticsUserId, setUserProperties } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyACpgbJVKPzprtHMG55nqKEwZsvzbN-uXs",
+            authDomain: "reinforcement-learner.firebaseapp.com",
+            databaseURL: "https://reinforcement-learner-default-rtdb.firebaseio.com",
+            projectId: "reinforcement-learner",
+            storageBucket: "reinforcement-learner.firebasestorage.app",
+            messagingSenderId: "161744502408",
+            appId: "1:161744502408:web:af6ef682a943c4f157a93d",
+            measurementId: "G-CG5D6P5KX8"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const analytics = getAnalytics(app);
+
+        // Make Firebase services globally accessible (use with caution)
+        window.auth = auth;
+        window.db = db;
+        window.analytics = analytics;
+        window.userId = null; // To store the current user ID
+
+        // Sign in anonymously
+        signInAnonymously(auth)
+            .then((userCredential) => {
+                window.userId = userCredential.user.uid;
+                console.log("User signed in anonymously:", window.userId);
+                showLogin(); // Proceed to the login/profile setup
+            })
+            .catch((error) => {
+                console.error("Anonymous sign-in error:", error);
+                // Handle errors, perhaps show an error message to the user
+            });
+
+        // --- Game State and Logic ---
+        const state = {
+            steps: 0,
+            currentScore: 0,
+            puzzle: [],
+            puzzleElements: [],
+            replayBuffer: [],
+            rlPolicy: {},
+            puzzleSymbols: ['⭐', '☁️', '☀️', '🌈', '⚡', '❄️', '🌙', '☔'],
+            rewards: {
+                '⭐': 10, '☁️': 10, '☀️': 10, '🌈': 10, '⚡': 10, '❄️': 10, '🌙': 10, '☔': 10,
+                'mismatch': -1
+            },
+            delay: 1000,
+            replayWindowSize: 5,
+            epochs: 1,
+            isProcessing: false,
+            currentRound: 0,
+            roundScores: {
+                rewardPolicy: 0,
+                replayBuffer: 0,
+                policy: 0
+            }
+        };
+
+        const appContent = document.getElementById('app-content');
+        let flippedCards = [];
+
+        function createPuzzleGrid() {
+            const grid = document.createElement('div');
+            grid.className = 'puzzle-grid';
+            state.puzzleElements = [];
+            state.puzzle.forEach((item, index) => {
+                const puzzleItem = document.createElement('div');
+                puzzleItem.className = 'puzzle-item';
+                puzzleItem.dataset.value = item;
+                puzzleItem.dataset.index = index;
+                state.puzzleElements.push(puzzleItem);
+                grid.appendChild(puzzleItem);
+            });
+            const existingGrid = document.querySelector('.puzzle-grid');
+            if (existingGrid) {
+                existingGrid.replaceWith(grid);
+            } else {
+                appContent.appendChild(grid);
+            }
+        }
+
+        function flipCard(index) {
+            const card = state.puzzleElements[index];
+            if (card.classList.contains('matched') || card.classList.contains('flipped')) return Promise.resolve();
+            card.classList.add('flipped');
+            card.innerHTML = state.puzzle[index];
+            return new Promise(resolve => setTimeout(resolve, state.delay));
+        }
+
+        function unflipCard(index) {
+            const card = state.puzzleElements[index];
+            if (card.classList.contains('matched')) return Promise.resolve();
+            card.classList.remove('flipped');
+            card.innerHTML = '';
+            return new Promise(resolve => setTimeout(resolve, state.delay));
+        }
+
+        function matchCards(index1, index2) {
+            const card1 = state.puzzleElements[index1];
+            const card2 = state.puzzleElements[index2];
+            card1.classList.add('matched');
+            card2.classList.add('matched');
+            card1.style.cursor = 'default';
+            card2.style.cursor = 'default';
+            return new Promise(resolve => setTimeout(resolve, state.delay));
+        }
+        
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function logMove(message, type = 'info', logId = 'log-content') {
+            const logContent = document.getElementById(logId);
+            if (!logContent) return;
+            const p = document.createElement('p');
+            p.textContent = message;
+            p.className = `log-item text-xs ${type === 'positive' ? 'reward-positive' : type === 'negative' ? 'reward-negative' : ''}`;
+            logContent.prepend(p);
+        }
+
+        function displayRewardPolicy(rewards, policyId) {
+            const rewardPolicyContent = document.getElementById(policyId);
+            if (!rewardPolicyContent) return;
+            rewardPolicyContent.innerHTML = '';
+            
+            for (const symbol of state.puzzleSymbols) {
+                const item = document.createElement('div');
+                item.className = 'flex items-center space-x-2 text-sm';
+                item.innerHTML = `<span class="text-xl">${symbol}</span><span class="font-bold text-green-600">+${rewards[symbol]}</span>`;
+                rewardPolicyContent.appendChild(item);
+            }
+            const mismatchItem = document.createElement('div');
+            mismatchItem.className = 'flex items-center space-x-2 text-sm';
+            mismatchItem.innerHTML = `<span class="text-base font-bold text-red-600">Mismatch: ${rewards.mismatch}</span>`;
+            rewardPolicyContent.appendChild(mismatchItem);
+        }
+        
+        function setupRewardSliders() {
+            const container = document.getElementById('reward-sliders');
+            container.innerHTML = '';
+            state.puzzleSymbols.forEach(symbol => {
+                const sliderWrapper = document.createElement('div');
+                sliderWrapper.className = 'flex flex-col items-center';
+                
+                const label = document.createElement('label');
+                label.htmlFor = `${symbol}-reward-slider`;
+                label.className = 'text-sm font-semibold text-gray-700';
+                label.innerHTML = `Match <span class="text-xl">${symbol}</span>: <span id="${symbol}-reward-value">${state.rewards[symbol]}</span>`;
+                
+                const slider = document.createElement('input');
+                slider.type = 'range';
+                slider.id = `${symbol}-reward-slider`;
+                slider.min = '1';
+                slider.max = '20';
+                slider.value = state.rewards[symbol];
+
+                slider.addEventListener('input', (e) => {
+                    state.rewards[symbol] = parseInt(e.target.value);
+                    document.getElementById(`${symbol}-reward-value`).textContent = e.target.value;
+                    displayRewardPolicy(state.rewards, 'reward-policy-content');
+                });
+                
+                sliderWrapper.appendChild(label);
+                sliderWrapper.appendChild(slider);
+                container.appendChild(sliderWrapper);
+            });
+
+            const mismatchSliderWrapper = document.createElement('div');
+            mismatchSliderWrapper.className = 'flex flex-col items-center mt-4';
+            const mismatchLabel = document.createElement('label');
+            mismatchLabel.htmlFor = 'mismatch-penalty-slider';
+            mismatchLabel.className = 'text-sm font-semibold text-gray-700';
+            mismatchLabel.innerHTML = `Mismatch Penalty: <span id="mismatch-penalty-value">${state.rewards.mismatch}</span>`;
+            
+            const mismatchSlider = document.createElement('input');
+            mismatchSlider.type = 'range';
+            mismatchSlider.id = 'mismatch-penalty-slider';
+            mismatchSlider.min = '-20';
+            mismatchSlider.max = '-1';
+            mismatchSlider.value = state.rewards.mismatch;
+
+            mismatchSlider.addEventListener('input', (e) => {
+                state.rewards.mismatch = parseInt(e.target.value);
+                document.getElementById('mismatch-penalty-value').textContent = e.target.value;
+                displayRewardPolicy(state.rewards, 'reward-policy-content');
+            });
+            mismatchSliderWrapper.appendChild(mismatchLabel);
+            mismatchSliderWrapper.appendChild(mismatchSlider);
+            container.appendChild(mismatchSliderWrapper);
+        }
+
+        async function saveUserData(userData) {
+            const { db, userId, analytics } = window;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+            if (!userId || !db) {
+                console.warn("User or database not available. Data will not be saved.");
+                return;
+            }
+            
+            const userProfileRef = doc(db, `artifacts/${appId}/users/${userId}/user_data/profile`);
+            try {
+                await setDoc(userProfileRef, userData, { merge: true });
+                console.log("User data saved successfully!");
+
+                if (analytics) {
+                    setAnalyticsUserId(analytics, userId);
+                    setUserProperties(analytics, {
+                        first_name: userData.firstName,
+                        last_name: userData.lastName,
+                        age: userData.age,
+                        grade: userData.grade
+                    });
+                    console.log("User data (properties) sent to Google Analytics!");
+                }
+            } catch (e) {
+                console.error("Error saving user data:", e);
+            }
+        }
+        
+        async function saveGameRecord() {
+            const { db, userId, analytics } = window;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            
+            if (!userId || !db) {
+                console.warn("User or database not available. Game record will not be saved.");
+                return;
+            }
+            
+            const gameRecordsRef = collection(db, `artifacts/${appId}/users/${userId}/game_records`);
+            const gameData = {
+                date: new Date().toISOString(),
+                reward_policy_score: state.roundScores.rewardPolicy,
+                replay_buffer_score: state.roundScores.replayBuffer,
+                policy_score: state.roundScores.policy,
+            };
+            try {
+                await addDoc(gameRecordsRef, gameData);
+                console.log("Game record saved successfully!");
+
+                if (analytics) {
+                    logEvent(analytics, 'game_completed', {
+                        reward_policy_score: state.roundScores.rewardPolicy,
+                        replay_buffer_score: state.roundScores.replayBuffer,
+                        policy_score: state.roundScores.policy,
+                    });
+                    console.log("Game completion event sent to Google Analytics!");
+                }
+            } catch (e) {
+                console.error("Error saving game record:", e);
+            }
+        }
+
+        function showLogin() {
+            appContent.innerHTML = `
+                <div class="flex flex-col items-center">
+                    <h2 class="text-3xl font-bold mb-4 text-purple-600">Tell Us About You!</h2>
+                    <p class="mb-4 text-lg">Help Bot Sparkle learn by sharing a little bit about yourself.</p>
+                    <form id="loginForm" class="flex flex-col items-center w-full max-w-sm mx-auto">
+                        <div class="w-full mb-4">
+                            <input type="text" id="firstName" placeholder="Your First Name" class="input-field" required>
+                        </div>
+                        <div class="w-full mb-4">
+                            <input type="text" id="lastName" placeholder="Your Last Name" class="input-field" required>
+                        </div>
+                        <div class="w-full mb-4">
+                            <input type="number" id="age" placeholder="Your Age" class="input-field" min="1" required>
+                        </div>
+                        <div class="w-full mb-4">
+                            <input type="text" id="grade" placeholder="Your Grade" class="input-field" required>
+                        </div>
+                        <div class="w-full mb-4">
+                            <button type="submit" class="button-primary mt-4">Play!</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            document.getElementById('loginForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const firstName = document.getElementById('firstName').value;
+                const lastName = document.getElementById('lastName').value;
+                const age = document.getElementById('age').value;
+                const grade = document.getElementById('grade').value;
+                
+                const userData = {
+                    firstName,
+                    lastName,
+                    age: parseInt(age, 10),
+                    grade
+                };
+
+                await saveUserData(userData);
+                showInfoPage();
+            });
+        }
+
+        function showInfoPage() {
+            appContent.innerHTML = `
+                <div class="flex flex-col items-center text-left">
+                    <h2 class="text-3xl font-bold mb-4 text-green-600">What is Reinforcement Learning?</h2>
+                    <p class="text-lg mb-4 text-gray-700">
+                        Reinforcement Learning (RL) is a type of machine learning where an agent learns to make decisions in an environment to maximize a reward. Think of it like training a dog: you give it a treat (positive reward) when it does something right, and nothing (negative reward) when it doesn't.
+                    </p>
+                    <div class="p-4 bg-gray-100 rounded-xl mb-4">
+                        <h3 class="font-bold text-lg mb-2">Key Concepts:</h3>
+                        <ul class="list-disc list-inside text-gray-600">
+                            <li><strong>Environment:</strong> The game board with all the cards.</li>
+                            <li><strong>Actions:</strong> Flipping a card.</li>
+                            <li><strong>Rewards:</strong> Positive for a match, negative for a mismatch.</li>
+                            <li><strong>Policy:</strong> The agent's strategy for picking which cards to flip.</li>
+                        </ul>
+                    </div>
+                    <button id="startRound1Button" class="button-primary mt-6">Start Round 1: Reward Policy</button>
+                </div>
+            `;
+            document.getElementById('startRound1Button').addEventListener('click', showRound1);
+        }
+
+        function showRound1() {
+            state.currentRound = 1;
+            state.steps = 0;
+            state.currentScore = 0;
+            state.puzzle = state.puzzleSymbols.concat(state.puzzleSymbols);
+            shuffleArray(state.puzzle);
+            appContent.innerHTML = `
+                <h2 class="text-3xl font-bold mb-4 text-purple-600">Round 1: Reward Policy</h2>
+                <p class="text-xl mb-4">Set your own reward policy for each match and for a mismatch.</p>
+                <div class="flex flex-col md:flex-row md:justify-center md:items-center md:space-x-8 text-xl font-bold mt-4">
+                    <div class="text-purple-600">Steps: <span id="stepCounter">0</span></div>
+                    <div class="text-green-600">Score: <span id="scoreCounter">0</span></div>
+                </div>
+                <div class="flex flex-col lg:flex-row lg:space-x-8 w-full mt-4 items-start">
+                    <div id="reward-policy-container" class="round-card w-full lg:w-1/2 mb-4 lg:mb-0">
+                        <h3 class="text-lg font-bold mb-2">Current Reward Policy</h3>
+                        <div id="reward-policy-content" class="flex flex-wrap justify-center gap-2"></div>
+                    </div>
+                    <div id="reward-sliders" class="grid grid-cols-2 md:grid-cols-4 gap-4 w-full lg:w-1/2"></div>
+                </div>
+            `;
+            createPuzzleGrid();
+            setupRewardSliders();
+            displayRewardPolicy(state.rewards, 'reward-policy-content');
+            startRound1Logic();
+        }
+
+        function startRound1Logic() {
+            const grid = document.querySelector('.puzzle-grid');
+            flippedCards = [];
+            grid.addEventListener('click', handleRound1Click);
+        }
+
+        async function handleRound1Click(event) {
+            if (state.isProcessing) return;
+            state.isProcessing = true;
+            const card = event.target.closest('.puzzle-item');
+            if (!card || card.classList.contains('flipped') || card.classList.contains('matched')) {
+                state.isProcessing = false;
+                return;
+            }
+
+            state.steps++;
+            document.getElementById('stepCounter').innerText = state.steps;
+
+            const index = parseInt(card.dataset.index);
+            await flipCard(index);
+            flippedCards.push(index);
+
+            if (flippedCards.length === 2) {
+                const [idx1, idx2] = flippedCards;
+                const value1 = state.puzzle[idx1];
+                const value2 = state.puzzle[idx2];
+                let reward;
+                let moveType;
+
+                if (value1 === value2) {
+                    reward = state.rewards[value1];
+                    moveType = 'positive';
+                    await matchCards(idx1, idx2);
+                    logMove(`✅ It's a match! You earned +${reward} points!`, moveType);
+                } else {
+                    reward = state.rewards.mismatch;
+                    moveType = 'negative';
+                    await unflipCard(idx1);
+                    await unflipCard(idx2);
+                    logMove(`❌ Mismatch. You lost ${Math.abs(reward)} points.`, moveType);
+                }
+                state.currentScore += reward;
+                document.getElementById('scoreCounter').innerText = state.currentScore;
+                flippedCards = [];
+
+                if (document.querySelectorAll('.puzzle-item:not(.matched)').length === 0) {
+                    const grid = document.querySelector('.puzzle-grid');
+                    grid.removeEventListener('click', handleRound1Click);
+                    state.isProcessing = false;
+                    state.roundScores.rewardPolicy = state.currentScore;
+                    showTransitionToRound2Screen();
+                    return;
+                }
+            }
+            state.isProcessing = false;
+        }
+
+        function showTransitionToRound2Screen() {
+            appContent.innerHTML = `
+                <div class="flex flex-col items-center">
+                    <h2 class="text-4xl font-bold mb-2 text-green-600">Round 1 Complete!</h2>
+                    <p class="text-2xl font-bold mb-6 text-indigo-700">Your final score was: **${state.roundScores.rewardPolicy}**</p>
+                    <button id="startRound2Button" class="button-primary mt-6">Start Round 2: Replay Buffer</button>
+                </div>
+            `;
+            document.getElementById('startRound2Button').addEventListener('click', showRound2);
+        }
+
+        function showRound2() {
+            state.currentRound = 2;
+            state.steps = 0;
+            state.currentScore = 0;
+            state.replayBuffer = [];
+            state.rlPolicy = {};
+            state.puzzle = state.puzzleSymbols.concat(state.puzzleSymbols);
+            shuffleArray(state.puzzle);
+            appContent.innerHTML = `
+                <h2 class="text-3xl font-bold mb-4 text-orange-600">Round 2: Replay Buffer</h2>
+                <p class="text-xl mb-4">Your moves will now be stored in a replay buffer.</p>
+                <div class="flex flex-col md:flex-row md:justify-center md:items-center md:space-x-8 text-xl font-bold mt-4">
+                    <div class="text-purple-600">Steps: <span id="stepCounter">0</span></div>
+                    <div class="text-green-600">Score: <span id="scoreCounter">0</span></div>
+                </div>
+                <div class="flex flex-col lg:flex-row lg:space-x-8 w-full mt-4 items-start">
+                    <div id="reward-policy-container" class="round-card w-full lg:w-1/2 mb-4 lg:mb-0">
+                        <h3 class="text-lg font-bold mb-2">Current Reward Policy</h3>
+                        <div id="reward-policy-content" class="flex flex-wrap justify-center gap-2"></div>
+                    </div>
+                    <div class="log-container w-full lg:w-1/2">
+                        <h3 class="text-lg font-bold mb-2">Your Replay Buffer:</h3>
+                        <div class="flex flex-col items-center mb-2">
+                             <label for="buffer-slider" class="text-sm font-semibold text-gray-700">Buffer Size: <span id="buffer-value">${state.replayWindowSize}</span></label>
+                             <input type="range" id="buffer-slider" min="2" max="10" value="${state.replayWindowSize}" class="w-full">
+                        </div>
+                        <div id="log-content" class="log-container"></div>
+                    </div>
+                </div>
+                <div class="puzzle-grid"></div>
+            `;
+            createPuzzleGrid();
+            displayRewardPolicy(state.rewards, 'reward-policy-content');
+            startRound2Logic();
+        }
+
+        function startRound2Logic() {
+            const grid = document.querySelector('.puzzle-grid');
+            flippedCards = [];
+            grid.addEventListener('click', handleRound2Click);
+            const bufferSlider = document.getElementById('buffer-slider');
+            bufferSlider.addEventListener('input', (e) => {
+                state.replayWindowSize = parseInt(e.target.value);
+                document.getElementById('buffer-value').textContent = e.target.value;
+            });
+        }
+
+        async function handleRound2Click(event) {
+            if (state.isProcessing) return;
+            state.isProcessing = true;
+            const card = event.target.closest('.puzzle-item');
+            if (!card || card.classList.contains('flipped') || card.classList.contains('matched')) {
+                state.isProcessing = false;
+                return;
+            }
+
+            state.steps++;
+            document.getElementById('stepCounter').innerText = state.steps;
+
+            const index = parseInt(card.dataset.index);
+            await flipCard(index);
+            flippedCards.push(index);
+
+            if (flippedCards.length === 2) {
+                const [idx1, idx2] = flippedCards;
+                const value1 = state.puzzle[idx1];
+                const value2 = state.puzzle[idx2];
+                let reward;
+                let moveType;
+
+                if (value1 === value2) {
+                    reward = state.rewards[value1];
+                    moveType = 'positive';
+                    await matchCards(idx1, idx2);
+                    logMove(`✅ Matched ${value1} and ${value2}. Reward: +${reward} points!`, moveType);
+                } else {
+                    reward = state.rewards.mismatch;
+                    moveType = 'negative';
+                    await unflipCard(idx1);
+                    await unflipCard(idx2);
+                    logMove(`❌ Mismatched ${value1} and ${value2}. Penalty: ${reward} points.`, moveType);
+                }
+                
+                state.currentScore += reward;
+                document.getElementById('scoreCounter').innerText = state.currentScore;
+                state.replayBuffer.push({ action: value1, reward: reward });
+                flippedCards = [];
+
+                if (state.replayBuffer.length >= state.replayWindowSize) {
+                    updatePolicyFromBuffer();
+                }
+
+                if (document.querySelectorAll('.puzzle-item:not(.matched)').length === 0) {
+                    const grid = document.querySelector('.puzzle-grid');
+                    grid.removeEventListener('click', handleRound2Click);
+                    state.isProcessing = false;
+                    state.roundScores.replayBuffer = state.currentScore;
+                    showTransitionToRound3Screen();
+                    return;
+                }
+            }
+            state.isProcessing = false;
+        }
+
+        function updatePolicyFromBuffer() {
+            logMove('--- Replaying buffer & updating policy ---', 'info');
+            state.replayBuffer.forEach(experience => {
+                const { action, reward } = experience;
+                if (!state.rlPolicy[action]) {
+                    state.rlPolicy[action] = 0;
+                }
+                state.rlPolicy[action] += reward;
+            });
+            state.replayBuffer = [];
+            logMove('Policy updated. Buffer cleared.', 'info');
+        }
+        
+        function showTransitionToRound3Screen() {
+            appContent.innerHTML = `
+                <div class="flex flex-col items-center">
+                    <h2 class="text-4xl font-bold mb-2 text-green-600">Round 2 Complete!</h2>
+                    <p class="text-2xl font-bold mb-6 text-indigo-700">Your final score was: **${state.roundScores.replayBuffer}**</p>
+                    <button id="startRound3Button" class="button-primary mt-6">Start Round 3: RL Policy</button>
+                </div>
+            `;
+            document.getElementById('startRound3Button').addEventListener('click', showRound3);
+        }
+
+        function showRound3() {
+            state.currentRound = 3;
+            state.steps = 0;
+            state.currentScore = 0;
+            state.puzzle = state.puzzleSymbols.concat(state.puzzleSymbols);
+            shuffleArray(state.puzzle);
+            appContent.innerHTML = `
+                <h2 class="text-3xl font-bold mb-4 text-blue-600">Round 3: Reinforcement Learning Policy</h2>
+                <p class="text-xl mb-4">You are the agent. You'll now use your learned policy to play the game and see how your strategy improves.</p>
+                <div class="flex flex-col md:flex-row md:justify-center md:items-center md:space-x-8 text-xl font-bold mt-4">
+                    <div class="text-purple-600">Steps: <span id="stepCounter">0</span></div>
+                    <div class="text-green-600">Score: <span id="scoreCounter">0</span></div>
+                </div>
+                <div id="left-panel" class="flex flex-col items-center">
+                    <div class="round-card w-full mb-4">
+                        <h3 class="text-lg font-bold mb-2">Learning Controls</h3>
+                        <p class="text-sm text-gray-700 mb-4 text-left">
+                            Your policy is updated by "replaying" your past experiences. The **Epochs** slider controls how many times you review your entire memory to refine your strategy. A higher number of epochs means a more robust policy.
+                         </p>
+                        <div class="flex flex-col items-center mb-2">
+                            <label for="epoch-slider" class="text-sm font-semibold text-gray-700">Epochs: <span id="epoch-value">${state.epochs}</span></label>
+                            <input type="range" id="epoch-slider" min="1" max="10" value="${state.epochs}" class="w-full">
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-col lg:flex-row lg:space-x-8 w-full mt-4 items-start">
+                    <div id="policy-display-container" class="round-card w-full lg:w-1/2 mb-4 lg:mb-0">
+                        <h3 class="text-lg font-bold mb-2">Learned Policy (Action -> Expected Reward)</h3>
+                        <div id="policy-content" class="flex flex-wrap justify-center gap-2"></div>
+                    </div>
+                    <div class="log-container w-full lg:w-1/2">
+                        <h3 class="text-lg font-bold mb-2">Game Log:</h3>
+                        <div id="log-content" class="log-container"></div>
+                    </div>
+                </div>
+                <div class="puzzle-grid"></div>
+            `;
+            createPuzzleGrid();
+            displayLearnedPolicy();
+            startRound3Logic();
+        }
+
+        function displayLearnedPolicy() {
+            const policyContent = document.getElementById('policy-content');
+            if (!policyContent) return;
+            policyContent.innerHTML = '';
+            
+            const sortedSymbols = Object.keys(state.rlPolicy).sort();
+
+            for (const symbol of sortedSymbols) {
+                const item = document.createElement('div');
+                item.className = 'flex items-center space-x-2 text-sm';
+                item.innerHTML = `<span class="text-xl">${symbol}</span><span class="font-bold text-blue-600">${state.rlPolicy[symbol].toFixed(2)}</span>`;
+                policyContent.appendChild(item);
+            }
+        }
+
+        function startRound3Logic() {
+            const grid = document.querySelector('.puzzle-grid');
+            flippedCards = [];
+            grid.addEventListener('click', handleRound3Click);
+            const epochSlider = document.getElementById('epoch-slider');
+            epochSlider.addEventListener('input', (e) => {
+                state.epochs = parseInt(e.target.value);
+                document.getElementById('epoch-value').textContent = e.target.value;
+            });
+        }
+
+        async function handleRound3Click(event) {
+            if (state.isProcessing) return;
+            state.isProcessing = true;
+            const card = event.target.closest('.puzzle-item');
+            if (!card || card.classList.contains('flipped') || card.classList.contains('matched')) {
+                state.isProcessing = false;
+                return;
+            }
+
+            state.steps++;
+            document.getElementById('stepCounter').innerText = state.steps;
+
+            const index = parseInt(card.dataset.index);
+            await flipCard(index);
+            flippedCards.push(index);
+
+            if (flippedCards.length === 2) {
+                const [idx1, idx2] = flippedCards;
+                const value1 = state.puzzle[idx1];
+                const value2 = state.puzzle[idx2];
+                let reward;
+                let moveType;
+
+                if (value1 === value2) {
+                    reward = state.rewards[value1];
+                    moveType = 'positive';
+                    await matchCards(idx1, idx2);
+                    logMove(`✅ Matched ${value1} and ${value2}. Reward: +${reward} points!`, moveType);
+                } else {
+                    reward = state.rewards.mismatch;
+                    moveType = 'negative';
+                    await unflipCard(idx1);
+                    await unflipCard(idx2);
+                    logMove(`❌ Mismatched ${value1} and ${value2}. Penalty: ${reward} points.`, moveType);
+                }
+                
+                state.currentScore += reward;
+                document.getElementById('scoreCounter').innerText = state.currentScore;
+                
+                // Update the learned policy based on the experienced reward
+                if (state.rlPolicy[value1] === undefined) state.rlPolicy[value1] = 0;
+                if (state.rlPolicy[value2] === undefined) state.rlPolicy[value2] = 0;
+                state.rlPolicy[value1] = (state.rlPolicy[value1] * (state.steps - 1) + reward) / state.steps;
+                state.rlPolicy[value2] = (state.rlPolicy[value2] * (state.steps - 1) + reward) / state.steps;
+                
+                // Update the display of the learned policy
+                displayLearnedPolicy();
+
+                flippedCards = [];
+
+                if (document.querySelectorAll('.puzzle-item:not(.matched)').length === 0) {
+                    const grid = document.querySelector('.puzzle-grid');
+                    grid.removeEventListener('click', handleRound3Click);
+                    state.isProcessing = false;
+                    state.roundScores.policy = state.currentScore;
+                    showGameEndScreen();
+                    return;
+                }
+            }
+            state.isProcessing = false;
+        }
+
+        function showGameEndScreen() {
+            appContent.innerHTML = `
+                <div class="flex flex-col items-center">
+                    <h2 class="text-4xl font-bold mb-2 text-green-600">Game Complete! 🎉</h2>
+                    <p class="text-2xl font-bold mb-6 text-indigo-700">Final Scores:</p>
+                    <div class="results-grid mb-8">
+                        <div class="round-card">
+                            <h3 class="text-lg font-bold mb-2">Round 1: Reward Policy</h3>
+                            <p class="text-2xl font-bold text-purple-600">${state.roundScores.rewardPolicy}</p>
+                        </div>
+                        <div class="round-card">
+                            <h3 class="text-lg font-bold mb-2">Round 2: Replay Buffer</h3>
+                            <p class="text-2xl font-bold text-orange-600">${state.roundScores.replayBuffer}</p>
+                        </div>
+                        <div class="round-card">
+                            <h3 class="text-lg font-bold mb-2">Round 3: RL Policy</h3>
+                            <p class="text-2xl font-bold text-blue-600">${state.roundScores.policy}</p>
+                        </div>
+                    </div>
+                    <button id="playAgainButton" class="button-primary mt-6">Play Again?</button>
+                </div>
+            `;
+            document.getElementById('playAgainButton').addEventListener('click', () => {
+                state.currentRound = 0;
+                state.roundScores = { rewardPolicy: 0, replayBuffer: 0, policy: 0 };
+                showLogin();
+            });
+            saveGameRecord();
+        }
+
+    </script>
+</body>
+</html>
